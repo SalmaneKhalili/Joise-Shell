@@ -1,3 +1,6 @@
 *.jar
 target/
 .idea/
+.README.md
+codecrafters.yml
+.codecrafters

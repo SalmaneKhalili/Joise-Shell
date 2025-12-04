@@ -15,7 +15,8 @@ public class CommandExecutor {
         registerCommand(new ExitCommand());
         registerCommand(new EchoCommand());
         registerCommand(new TypeCommand());
-        // ... and commands.TypeCommand, which needs the builtInCommands map and pathResolver
+        registerCommand(new PwdCommand());
+
     }
 
     private void registerCommand(Command command) {
