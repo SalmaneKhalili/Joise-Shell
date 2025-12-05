@@ -1,5 +1,6 @@
 package commands;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
@@ -10,10 +11,15 @@ public class PwdCommand implements Command {
     }
 
 
-    @Override
+
     public void execute(List<String> args){
-        String directory = Paths.get("").toAbsolutePath().toString();
-        System.out.println(directory);
+        System.out.println(System.getProperty("user.dir"));
+    }
+    @Override
+    public void execute(List<String> args, CommandExecutor executor){
+        Path currentDirectory = executor.getCwd();
+        System.out.println(currentDirectory);
+
     }
     @Override
     public String getName(){

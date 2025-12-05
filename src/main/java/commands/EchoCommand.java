@@ -8,7 +8,7 @@ public class EchoCommand implements Command {
         name = "echo";
     }
     @Override
-    public void execute(List<String> args){
+    public void execute(List<String> args, CommandExecutor executor){
         StringBuilder string = new StringBuilder("");
         for (int i = 1; i < args.size(); i++){
             string.append(args.get(i));

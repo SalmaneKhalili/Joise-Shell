@@ -13,7 +13,7 @@ public class TypeCommand implements Command {
         this.resolver = new PathResolver();
     }
     @Override
-    public void execute(List<String> args){
+    public void execute(List<String> args, CommandExecutor executor){
 
         Optional<Path> path = resolver.findExecutable(args.get(1));
         if (path.isPresent()){
