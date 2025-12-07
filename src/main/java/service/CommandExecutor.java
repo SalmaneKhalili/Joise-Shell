@@ -53,16 +53,31 @@ public class CommandExecutor {
                 isEscaping = false;
                 continue;
             }
-            if (c == '\\' && inQuotes || c == '\\' && inDoubleQuotes) {
+
+
+            if (c == '\\' && inDoubleQuotes) {
+                if (line.charAt(i - 1) != '\\') {
+                    if (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '`' || line.charAt(i + 1) == '$' || line.charAt(i + 1) == '\\') {
+                        isEscaping = true;
+                        continue;
+                    }
+
+                }
+
                 currentWord.append(c);
                 continue;
             }
 
-            if (c == '\\' && !inQuotes) {
+            if (c == '\\' && inQuotes) {
+                currentWord.append(c);
+                continue;
+            }
+
+            if (c == '\\') {
                 isEscaping = true;
                 continue;
             }
-            if (c == '\"' && !inQuotes) {
+            if (c == '\"' && !inQuotes ) {
                 inDoubleQuotes = !inDoubleQuotes;
                 continue;
             }
