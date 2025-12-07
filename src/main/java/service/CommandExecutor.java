@@ -53,15 +53,20 @@ public class CommandExecutor {
                 isEscaping = false;
                 continue;
             }
-            if (c == '\\') {
+            if (c == '\\' && inQuotes || c == '\\' && inDoubleQuotes) {
+                currentWord.append(c);
+                continue;
+            }
+
+            if (c == '\\' && !inQuotes) {
                 isEscaping = true;
                 continue;
             }
-            if (c == '\"') {
+            if (c == '\"' && !inQuotes) {
                 inDoubleQuotes = !inDoubleQuotes;
                 continue;
             }
-            if (c == '\'') {
+            if (c == '\'' && !inDoubleQuotes) {
                 inQuotes = !inQuotes;
                 continue;
             }
