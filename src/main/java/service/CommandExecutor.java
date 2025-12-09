@@ -37,69 +37,82 @@ public class CommandExecutor {
         builtInCommands.put(command.getName(), command);
     }
 
+
+
     public static List<String> parse(String line) {
         List<String> commandAndArguments = new ArrayList<>();
+        State currentState = State.DEFAULT;
+        State previousState = State.DEFAULT;
+        CharStream stream = new CharStream(line);
         StringBuilder currentWord = new StringBuilder();
 
-        // --- FSM State Flags ---
-        boolean inQuotes = false;
-        boolean inDoubleQuotes = false;
-        boolean isEscaping = false;
-
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (isEscaping) {
-                currentWord.append(c);
-                isEscaping = false;
-                continue;
-            }
-
-
-            if (c == '\\' && inDoubleQuotes) {
-                if (line.charAt(i - 1) != '\\') {
-                    if (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '`' || line.charAt(i + 1) == '$' || line.charAt(i + 1) == '\\') {
-                        isEscaping = true;
-                        continue;
+        while(stream.hasNext()){
+            char c = stream.next();
+            switch (currentState) {
+                case DEFAULT :
+                    if (c == '"'){
+                        currentState = State.IN_DOUBLE_QUOTES;
+                        previousState = State.DEFAULT;
+                        break;
+                    }
+                    if (c == '\''){
+                        currentState = State.IN_SINGLE_QUOTES;
+                        previousState = State.DEFAULT;
+                        break;
+                    }
+                    if (c == '\\'){
+                        currentState = State.ESCAPED;
+                        previousState = State.DEFAULT;
+                        break;
                     }
 
-                }
+                    if (c == ' ') {
+                        if (!currentWord.isEmpty()) {
+                            commandAndArguments.add(currentWord.toString());
+                            currentWord.setLength(0);
+                        }
+                        break;
+                    }
+                    currentWord.append(c);
+                    break;
+                case IN_DOUBLE_QUOTES:
+                    if (c == '\"'){
+                        currentState = State.DEFAULT;
+                        break;
+                    }
+                    if (c == '\\'){
+                        char nextChar = stream.peek();
+                        if (nextChar == '"' || nextChar == '$' || nextChar == '`' || nextChar == '\\' ){
+                            currentState = State.ESCAPED;
+                            previousState = State.IN_DOUBLE_QUOTES;
+                            break;
+                        }
 
-                currentWord.append(c);
-                continue;
+                    }
+                    currentWord.append(c);
+
+                    break;
+                case IN_SINGLE_QUOTES:
+                    if (c == '\'') {
+                        currentState = State.DEFAULT;
+                        break;
+                    }
+                    currentWord.append(c);
+                    break;
+                case ESCAPED:
+                    currentWord.append(c);
+                    currentState = previousState;
+                    break;
             }
 
-            if (c == '\\' && inQuotes) {
-                currentWord.append(c);
-                continue;
-            }
 
-            if (c == '\\') {
-                isEscaping = true;
-                continue;
-            }
-            if (c == '\"' && !inQuotes ) {
-                inDoubleQuotes = !inDoubleQuotes;
-                continue;
-            }
-            if (c == '\'' && !inDoubleQuotes) {
-                inQuotes = !inQuotes;
-                continue;
-            }
-            if (c == ' ' && !inQuotes && !inDoubleQuotes) {
-                if (currentWord.length() > 0) {
-                    commandAndArguments.add(currentWord.toString());
-                    currentWord.setLength(0);
-                }
-                continue;
-            }
-            currentWord.append(c);
         }
-        if (currentWord.length() > 0) {
-            commandAndArguments.add(currentWord.toString());
-        }
+        commandAndArguments.add(currentWord.toString());
         return commandAndArguments;
-    }
 
+
+
+    }
     public boolean executeCommand(String commandLine) {
         List<String> commandAndArguments = parse(commandLine);
         String commandName = commandAndArguments.get(0);
