@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 public class CommandExecutor {
@@ -41,28 +42,28 @@ public class CommandExecutor {
 
     public static List<String> parse(String line) {
         List<String> commandAndArguments = new ArrayList<>();
-        State currentState = State.DEFAULT;
-        State previousState = State.DEFAULT;
+        ParsingState currentParsingState = ParsingState.DEFAULT;
+        ParsingState previousParsingState = ParsingState.DEFAULT;
         CharStream stream = new CharStream(line);
         StringBuilder currentWord = new StringBuilder();
 
         while (stream.hasNext()) {
             char c = stream.next();
-            switch (currentState) {
+            switch (currentParsingState) {
                 case DEFAULT:
                     if (c == '"') {
-                        currentState = State.IN_DOUBLE_QUOTES;
-                        previousState = State.DEFAULT;
+                        currentParsingState = ParsingState.IN_DOUBLE_QUOTES;
+                        previousParsingState = ParsingState.DEFAULT;
                         break;
                     }
                     if (c == '\'') {
-                        currentState = State.IN_SINGLE_QUOTES;
-                        previousState = State.DEFAULT;
+                        currentParsingState = ParsingState.IN_SINGLE_QUOTES;
+                        previousParsingState = ParsingState.DEFAULT;
                         break;
                     }
                     if (c == '\\') {
-                        currentState = State.ESCAPED;
-                        previousState = State.DEFAULT;
+                        currentParsingState = ParsingState.ESCAPED;
+                        previousParsingState = ParsingState.DEFAULT;
                         break;
                     }
                     if (c == ' ') {
@@ -76,14 +77,14 @@ public class CommandExecutor {
                     break;
                 case IN_DOUBLE_QUOTES:
                     if (c == '\"') {
-                        currentState = State.DEFAULT;
+                        currentParsingState = ParsingState.DEFAULT;
                         break;
                     }
                     if (c == '\\') {
                         char nextChar = stream.peek();
                         if (nextChar == '"' || nextChar == '$' || nextChar == '`' || nextChar == '\\') {
-                            currentState = State.ESCAPED;
-                            previousState = State.IN_DOUBLE_QUOTES;
+                            currentParsingState = ParsingState.ESCAPED;
+                            previousParsingState = ParsingState.IN_DOUBLE_QUOTES;
                             break;
                         }
 
@@ -92,14 +93,14 @@ public class CommandExecutor {
                     break;
                 case IN_SINGLE_QUOTES:
                     if (c == '\'') {
-                        currentState = State.DEFAULT;
+                        currentParsingState = ParsingState.DEFAULT;
                         break;
                     }
                     currentWord.append(c);
                     break;
                 case ESCAPED:
                     currentWord.append(c);
-                    currentState = previousState;
+                    currentParsingState = previousParsingState;
                     break;
             }
 
@@ -115,6 +116,7 @@ public class CommandExecutor {
     public boolean executeCommand(String commandLine) {
         List<String> commandAndArguments = parse(commandLine);
         String commandName = commandAndArguments.getFirst();
+        WritingState writingState = WritingState.DEFAULT;
         if (isBuiltInCommand(commandName, commandAndArguments)) return true;
         Optional<Path> executablePath = pathResolver.findExecutable(commandName);
 
@@ -125,23 +127,50 @@ public class CommandExecutor {
 
         List<String> commandAndArgs = new ArrayList<>();
         commandAndArgs.add(executablePath.get().getFileName().toString());
-        Path file = getPath(commandAndArguments, commandAndArgs);
-        processor(commandAndArgs, file);
+        ProcessRecord processRecord = getPath(commandAndArguments, commandAndArgs, writingState);
+        processor(processRecord.commandsAndArgument(), processRecord.filePath(), processRecord.writingState());
         return true;
     }
 
-    private static Path getPath(List<String> commandAndArguments, List<String> commandAndArgs) {
-        if (commandAndArguments.size() <= 1) {
-            return null;
+    private static ProcessRecord getPath(List<String> commandAndArguments, List<String> commandAndArgs, WritingState writingState) {
+
+        if (commandAndArguments.contains(">>")) {
+            commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf(">>")));
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf(">>") + 1));
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.APPENDINGSTDOUT);
+        }
+
+        if (commandAndArguments.contains("1>>")) {
+            commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf("1>>")));
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf("1>>") + 1));
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.APPENDINGSTDOUT);
+        }
+
+        if (commandAndArguments.contains("2>>")) {
+            commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf("2>>")));
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf("2>>") + 1));
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.APPENDINGERROUT);
+        }
+
+        if (commandAndArguments.contains("2>")) {
+            commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf("2>")));
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf("2>") + 1));
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.REDIRECTERROUT);
         }
 
         if (commandAndArguments.contains(">")) {
             commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf(">"))); // split string into elements
-            return Paths.get(commandAndArguments.get(commandAndArguments.indexOf(">") + 1)); // isolationg the file path
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf(">") + 1)); // isolationg the file path
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.REDIREDTSTDOUT);
         }
 
+        if (commandAndArguments.contains("1>")) {
+            commandAndArgs.addAll(commandAndArguments.subList(1, commandAndArguments.indexOf("1>")));
+            Path filePath = Paths.get(commandAndArguments.get(commandAndArguments.indexOf("1>") + 1));
+            return new ProcessRecord(commandAndArgs, filePath, WritingState.REDIREDTSTDOUT);
+        }
 
-        return null;
+        return new ProcessRecord(commandAndArguments, null, writingState);
     }
 
     public boolean isBuiltInCommand(String command, List<String> args) {
@@ -158,7 +187,7 @@ public class CommandExecutor {
         return true;
     }
 
-    public void processor(List<String> commandAndArgs, Path file) {
+    public void processor(List<String> commandAndArgs, Path file, WritingState writingState) {
         ProcessBuilder builder = new ProcessBuilder(commandAndArgs);
         builder.directory(cwd.toFile());
         Process process;
@@ -178,14 +207,17 @@ public class CommandExecutor {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            if (file == null) { // implicit redirection for writing standard output
+            if (writingState == WritingState.DEFAULT || writingState == WritingState.REDIRECTERROUT || writingState == WritingState.APPENDINGERROUT) {
                 System.out.println(line);
                 continue;
             }
-            try {
-                Files.writeString(file, line);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            if (writingState == WritingState.REDIREDTSTDOUT || writingState == WritingState.APPENDINGSTDOUT) {
+                try {
+                    String content = line + System.lineSeparator();
+                    Files.writeString(file, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
 
@@ -195,7 +227,28 @@ public class CommandExecutor {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            System.out.println(line);
+
+            if (writingState == WritingState.DEFAULT || writingState == WritingState.REDIREDTSTDOUT) {
+                System.out.println(line);
+                continue;
+            }
+            if (writingState == WritingState.APPENDINGSTDOUT) {
+                try {
+                    System.out.println(line);
+                    Files.createFile(file);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (writingState == WritingState.REDIRECTERROUT || writingState == WritingState.APPENDINGERROUT) {
+                try {
+                    String content = line + System.lineSeparator();
+                    Files.writeString(file, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
     }
 }

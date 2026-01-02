@@ -1,0 +1,5 @@
+package service;
+
+public enum WritingState {
+    DEFAULT, REDIREDTSTDOUT, REDIRECTERROUT, APPENDINGSTDOUT,APPENDINGERROUT;
+}
