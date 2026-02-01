@@ -61,10 +61,6 @@ This implementation focuses on being small, predictable, and easy to inspect —
     - java -jar target/joise-shell.jar
 ---
 
-## License
-
-This project is licensed under the MIT License — see the LICENSE file for details.
-
 ---
 
 ## Contact
